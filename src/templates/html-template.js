@@ -47,7 +47,8 @@ export function generateHTML(
   posts,
   postCount,
   hiddenCount = 0,
-  pageTitle = "Simple Happy Reddit"
+  pageTitle = "Simple Happy Reddit",
+  readCount = 0
 ) {
   return `
     <!DOCTYPE html>
@@ -55,6 +56,12 @@ export function generateHTML(
       <head>
         <title>${pageTitle}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script>
+          // Prevent browser scroll restoration
+          if ('scrollRestoration' in history) {
+            history.scrollRestoration = 'manual';
+          }
+        </script>
         <style>
           body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -80,6 +87,7 @@ export function generateHTML(
           .post.self-post {
             
           }
+
           .post-header {
             display: flex;
             justify-content: space-between;
@@ -218,6 +226,57 @@ export function generateHTML(
             opacity: 1;
             background-color: #e0e0e0;
           }
+          .post-tags-categories {
+            margin-top: 12px;
+            padding-top: 8px;
+            border-top: 1px solid #f0f0f0;
+            font-size: 12px;
+            color: #888;
+            line-height: 1.4;
+          }
+          .tags-container, .categories-container {
+            margin-bottom: 4px;
+          }
+          .tag, .category {
+            display: inline-block;
+            background-color: #f8f9fa;
+            color: #666;
+            padding: 2px 6px;
+            margin: 1px 2px 1px 0;
+            border-radius: 3px;
+            font-size: 11px;
+            border: 1px solid #e9ecef;
+          }
+          .tag {
+            background-color: #f0f8ff;
+            border-color: #d6e9f7;
+          }
+          .category {
+            background-color: #f8f0ff;
+            border-color: #e9d6f7;
+          }
+          .debug-info {
+            margin-top: 12px;
+            padding: 10px;
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #856404;
+            display: none;
+          }
+          .debug-info.visible {
+            display: block;
+          }
+          .debug-label {
+            font-weight: 600;
+            margin-bottom: 5px;
+          }
+          .debug-content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            line-height: 1.4;
+          }
         </style>
         <script>
           function toggleSelfText(element) {
@@ -247,6 +306,11 @@ export function generateHTML(
           }
 
           let blockedSubreddits = new Set();
+          let readPosts = new Set();
+          let visibilityObserver;
+          let postVisibilityTimers = new Map();
+          let isAtTop = true;
+          let readTrackingEnabled = false;
           
           function loadBlockedSubreddits() {
             fetch('/api/blocked/subreddits')
@@ -258,6 +322,104 @@ export function generateHTML(
               .catch(error => {
                 console.error('Error loading blocked subreddits:', error);
               });
+          }
+
+          function initializeReadTracking() {
+            // Force scroll to top on page load (override browser scroll restoration)
+            window.scrollTo(0, 0);
+            document.documentElement.scrollTop = 0;
+            document.body.scrollTop = 0;
+            
+            // Monitor scroll position to enable/disable read tracking
+            function checkScrollPosition() {
+              const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+              isAtTop = scrollTop < 50; // Consider "at top" if within 50px of top
+              
+              if (isAtTop && !readTrackingEnabled) {
+                readTrackingEnabled = true;
+                console.log('Read tracking enabled - page is at top');
+              } else if (!isAtTop && readTrackingEnabled) {
+                // Don't disable once enabled, just track the state
+              }
+            }
+            
+            // Check initial position
+            checkScrollPosition();
+            
+            // Monitor scroll events
+            window.addEventListener('scroll', checkScrollPosition, { passive: true });
+            
+            if ('IntersectionObserver' in window) {
+              visibilityObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                  const postElement = entry.target;
+                  const postId = postElement.dataset.postId;
+                  
+                  if (entry.isIntersecting && readTrackingEnabled) {
+                    // Post is visible and read tracking is enabled, start timer
+                    if (!postVisibilityTimers.has(postId)) {
+                      const timer = setTimeout(() => {
+                        markPostAndAboveAsRead(postElement);
+                      }, 1000);
+                      postVisibilityTimers.set(postId, timer);
+                    }
+                  } else {
+                    // Post is no longer visible or read tracking disabled, clear timer
+                    const timer = postVisibilityTimers.get(postId);
+                    if (timer) {
+                      clearTimeout(timer);
+                      postVisibilityTimers.delete(postId);
+                    }
+                  }
+                });
+              }, {
+                threshold: 0.5,
+                rootMargin: '0px'
+              });
+
+              // Observe all posts
+              document.querySelectorAll('.post[data-post-id]').forEach(post => {
+                visibilityObserver.observe(post);
+              });
+            }
+          }
+
+          function markPostAndAboveAsRead(postElement) {
+            const allPosts = Array.from(document.querySelectorAll('.post[data-post-id]'));
+            const currentPostIndex = allPosts.indexOf(postElement);
+            
+            if (currentPostIndex === -1) return;
+            
+            // Get all posts from the top up to and including the current post
+            const postsToMarkRead = allPosts.slice(0, currentPostIndex + 1);
+            const postIds = postsToMarkRead
+              .map(post => post.dataset.postId)
+              .filter(id => !readPosts.has(id));
+            
+            if (postIds.length === 0) return;
+            
+            // Mark posts as read locally
+            postIds.forEach(id => readPosts.add(id));
+            
+            // Send to server
+            fetch('/api/posts/mark-read', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ postIds: postIds })
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                console.log('Marked ' + postIds.length + ' posts as read');
+              }
+            })
+            .catch(error => {
+              console.error('Error marking posts as read:', error);
+              // Remove from local set if server request failed
+              postIds.forEach(id => readPosts.delete(id));
+            });
           }
           
           function updateBlockIcons() {
@@ -335,11 +497,126 @@ export function generateHTML(
             });
           }
           
-          document.addEventListener('DOMContentLoaded', loadBlockedSubreddits);
+          function toggleDebugInfo() {
+            const debugToggle = document.getElementById('debugToggle');
+            const debugInfos = document.querySelectorAll('.debug-info');
+            
+            debugInfos.forEach(debugInfo => {
+              if (debugToggle.checked) {
+                debugInfo.classList.add('visible');
+              } else {
+                debugInfo.classList.remove('visible');
+              }
+            });
+          }
+          
+          function clearModerationData() {
+            const confirmed = confirm(
+              'Are you sure you want to delete ALL moderation data?\\n\\n' +
+              'This will:\\n' +
+              '• Clear all AI analysis results\\n' +
+              '• Remove all post categories and tags\\n' +
+              '• Reset all posts to visible\\n' +
+              '• Re-apply subreddit and keyword filters\\n\\n' +
+              'This action cannot be undone!'
+            );
+            
+            if (!confirmed) {
+              return;
+            }
+            
+            const button = document.getElementById('clearModerationBtn');
+            const originalText = button.textContent;
+            button.textContent = 'Clearing...';
+            button.disabled = true;
+            button.style.backgroundColor = '#6c757d';
+            
+            fetch('/api/moderation/clear', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              }
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                const notification = document.createElement('div');
+                notification.style.cssText = 
+                  'position: fixed;' +
+                  'top: 20px;' +
+                  'right: 20px;' +
+                  'background: #28a745;' +
+                  'color: white;' +
+                  'padding: 15px 20px;' +
+                  'border-radius: 5px;' +
+                  'z-index: 1000;' +
+                  'font-size: 14px;' +
+                  'box-shadow: 0 2px 10px rgba(0,0,0,0.2);' +
+                  'max-width: 300px;' +
+                  'line-height: 1.4;';
+                notification.innerHTML = 
+                  '<strong>Moderation data cleared!</strong><br>' +
+                  'Total posts: ' + data.stats.totalPosts + '<br>' +
+                  'Visible: ' + data.stats.visiblePosts + '<br>' +
+                  'Hidden: ' + data.stats.hiddenPosts + '<br>' +
+                  'Read status reset';
+                document.body.appendChild(notification);
+                
+                setTimeout(function() {
+                  notification.remove();
+                  window.location.reload();
+                }, 3000);
+              } else {
+                alert('Failed to clear moderation data: ' + (data.error || 'Unknown error'));
+              }
+            })
+            .catch(error => {
+              console.error('Error:', error);
+              alert('Failed to clear moderation data');
+            })
+            .finally(() => {
+              button.textContent = originalText;
+              button.disabled = false;
+              button.style.backgroundColor = '#dc3545';
+            });
+          }
+          
+          document.addEventListener('DOMContentLoaded', function() {
+            loadBlockedSubreddits();
+            
+            // Small delay to ensure page is fully loaded before initializing read tracking
+            setTimeout(function() {
+              initializeReadTracking();
+            }, 100);
+          });
         </script>
       </head>
       <body>
         <h1>${pageTitle === "Hidden Posts" ? "😢" : "🎉"} ${pageTitle}</h1>
+        <div style="text-align: center; margin-bottom: 20px; display: flex; justify-content: center; align-items: center; gap: 20px; flex-wrap: wrap;">
+          <label style="font-size: 14px; color: #666; cursor: pointer;">
+            <input type="checkbox" id="debugToggle" onchange="toggleDebugInfo()" style="margin-right: 8px;">
+            Show debug info
+          </label>
+          <button 
+            id="clearModerationBtn" 
+            onclick="clearModerationData()" 
+            style="
+              background: #dc3545; 
+              color: white; 
+              border: none; 
+              padding: 8px 16px; 
+              border-radius: 4px; 
+              font-size: 12px; 
+              cursor: pointer;
+              transition: background-color 0.2s ease;
+            "
+            onmouseover="this.style.backgroundColor='#c82333'"
+            onmouseout="this.style.backgroundColor='#dc3545'"
+          >
+            Delete All Moderation Data
+          </button>
+        </div>
         ${
           posts.length === 0
             ? '<div class="loading">Loading posts or no posts available...</div>'
@@ -354,14 +631,21 @@ export function generateHTML(
                   : ""
               }
               ${
-                pageTitle === "Hidden Posts"
-                  ? `<div style="text-align: center; margin-bottom: 20px;"><a href="/" style="color: #0079d3; text-decoration: none;">← Back to visible posts</a></div>`
+                readCount > 0 && pageTitle === "Simple Happy Reddit"
+                  ? `<div style="text-align: center; margin-bottom: 20px;"><a href="/read" style="color: #0079d3; text-decoration: none;">View ${readCount} read posts</a></div>`
+                  : ""
+              }
+              ${
+                pageTitle === "Hidden Posts" || pageTitle === "Read Posts"
+                  ? `<div style="text-align: center; margin-bottom: 20px;"><a href="/" style="color: #0079d3; text-decoration: none;">← Back to unread posts</a></div>`
                   : ""
               }
           ${posts
             .map(
               (post) => `
-            <div class="post${post.selfText ? " self-post" : ""}">
+            <div class="post${
+              post.selfText ? " self-post" : ""
+            }" data-post-id="${post.id}">
               <div class="post-header">
                 <a href="${
                   post.url
@@ -405,6 +689,47 @@ export function generateHTML(
                   : ""
               }
               ${generateMediaHTML(post.media)}
+              ${
+                post.categories || post.tags
+                  ? `<div class="post-tags-categories">
+                      ${
+                        post.categories && post.categories.length > 0
+                          ? `<div class="categories-container">
+                              <span style="font-weight: 500;">Categories:</span>
+                              ${post.categories
+                                .map(
+                                  (category) =>
+                                    `<span class="category">${category}</span>`
+                                )
+                                .join("")}
+                            </div>`
+                          : ""
+                      }
+                      ${
+                        post.tags && post.tags.length > 0
+                          ? `<div class="tags-container">
+                              <span style="font-weight: 500;">Tags:</span>
+                              ${post.tags
+                                .map((tag) => `<span class="tag">${tag}</span>`)
+                                .join("")}
+                            </div>`
+                          : ""
+                      }
+                    </div>`
+                  : ""
+              }
+              <div class="debug-info">
+                <div class="debug-label">Post ID: ${post.id || "N/A"}</div>
+                ${
+                  post.aiExplanation
+                    ? `<div class="debug-label">AI Explanation:</div>
+                <div class="debug-content">${post.aiExplanation.replace(
+                  /"/g,
+                  "&quot;"
+                )}</div>`
+                    : '<div class="debug-content">No AI explanation available</div>'
+                }
+              </div>
             </div>
           `
             )

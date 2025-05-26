@@ -131,13 +131,40 @@ class DatabaseManager {
       )
     `;
 
+    const createPostCategoriesTable = `
+      CREATE TABLE IF NOT EXISTS post_categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        post_id TEXT NOT NULL,
+        category_id INTEGER NOT NULL,
+        created_at INTEGER DEFAULT (strftime('%s', 'now')),
+        FOREIGN KEY (post_id) REFERENCES posts(id),
+        FOREIGN KEY (category_id) REFERENCES categories(id),
+        UNIQUE(post_id, category_id)
+      )
+    `;
+
+    const createPostTagsTable = `
+      CREATE TABLE IF NOT EXISTS post_tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        post_id TEXT NOT NULL,
+        tag_id INTEGER NOT NULL,
+        created_at INTEGER DEFAULT (strftime('%s', 'now')),
+        FOREIGN KEY (post_id) REFERENCES posts(id),
+        FOREIGN KEY (tag_id) REFERENCES tags(id),
+        UNIQUE(post_id, tag_id)
+      )
+    `;
+
     this.db.exec(createPostsTable);
     this.db.exec(createBlockedSubredditsTable);
     this.db.exec(createBlockedKeywordsTable);
     this.db.exec(createCategoriesTable);
     this.db.exec(createTagsTable);
+    this.db.exec(createPostCategoriesTable);
+    this.db.exec(createPostTagsTable);
 
     this.addHiddenColumnIfNotExists();
+    this.addAnalysisColumnsIfNotExists();
 
     const createIndexes = `
       CREATE INDEX IF NOT EXISTS idx_posts_subreddit ON posts(subreddit);
@@ -145,10 +172,14 @@ class DatabaseManager {
       CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_utc DESC);
       CREATE INDEX IF NOT EXISTS idx_posts_fetched ON posts(fetched_at DESC);
       CREATE INDEX IF NOT EXISTS idx_posts_hidden ON posts(hidden);
+      CREATE INDEX IF NOT EXISTS idx_posts_analyzed_at ON posts(analyzed_at);
+      CREATE INDEX IF NOT EXISTS idx_posts_read_at ON posts(read_at);
       CREATE INDEX IF NOT EXISTS idx_blocked_subreddits ON blocked_subreddits(subreddit);
       CREATE INDEX IF NOT EXISTS idx_blocked_keywords ON blocked_keywords(keyword);
       CREATE INDEX IF NOT EXISTS idx_categories ON categories(name);
       CREATE INDEX IF NOT EXISTS idx_tags ON tags(name);
+      CREATE INDEX IF NOT EXISTS idx_post_categories ON post_categories(post_id);
+      CREATE INDEX IF NOT EXISTS idx_post_tags ON post_tags(post_id);
     `;
 
     this.db.exec(createIndexes);
@@ -172,44 +203,52 @@ class DatabaseManager {
     }
   }
 
+  addAnalysisColumnsIfNotExists() {
+    const columns = [
+      { name: "ai_explanation", type: "TEXT" },
+      { name: "analyzed_at", type: "INTEGER" },
+      { name: "read_at", type: "INTEGER" },
+    ];
+
+    for (const column of columns) {
+      try {
+        const stmt = this.db.prepare(`
+          ALTER TABLE posts ADD COLUMN ${column.name} ${column.type}
+        `);
+        stmt.run();
+        console.log(`Added ${column.name} column to posts table`);
+      } catch (error) {
+        if (!error.message.includes("duplicate column name")) {
+          console.error(`Error adding ${column.name} column:`, error.message);
+        }
+      }
+    }
+  }
+
   async savePost(postData) {
-    const isHidden = this.isPostBlocked(postData);
-
-    const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO posts (
-        id, title, url, score, num_comments, subreddit, 
-        created_utc, is_self, self_text, media_type, 
-        media_data, permalink, hidden
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const result = stmt.run(
-      postData.id,
-      postData.title,
-      postData.url,
-      postData.score,
-      postData.num_comments,
-      postData.subreddit,
-      postData.created_utc,
-      postData.is_self ? 1 : 0,
-      postData.self_text,
-      postData.media_type,
-      postData.media_data,
-      postData.permalink,
-      isHidden ? 1 : 0
-    );
-
-    await this.uploadDatabaseToCloud();
-    return result;
+    return await this.savePosts([postData]);
   }
 
   async savePosts(postsArray) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO posts (
+      INSERT INTO posts (
         id, title, url, score, num_comments, subreddit, 
         created_utc, is_self, self_text, media_type, 
         media_data, permalink, hidden
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        title = excluded.title,
+        url = excluded.url,
+        score = excluded.score,
+        num_comments = excluded.num_comments,
+        subreddit = excluded.subreddit,
+        created_utc = excluded.created_utc,
+        is_self = excluded.is_self,
+        self_text = excluded.self_text,
+        media_type = excluded.media_type,
+        media_data = excluded.media_data,
+        permalink = excluded.permalink,
+        hidden = excluded.hidden
     `);
 
     const transaction = this.db.transaction((posts) => {
@@ -238,8 +277,22 @@ class DatabaseManager {
     return result;
   }
 
-  getPosts(limit = 100, offset = 0, includeHidden = false) {
-    const whereClause = includeHidden ? "" : "WHERE hidden = 0";
+  getPosts(limit = 100, offset = 0, includeHidden = false, includeRead = true) {
+    let whereConditions = [];
+
+    if (!includeHidden) {
+      whereConditions.push("hidden = 0");
+    }
+
+    if (!includeRead) {
+      whereConditions.push("read_at IS NULL");
+    }
+
+    const whereClause =
+      whereConditions.length > 0
+        ? `WHERE ${whereConditions.join(" AND ")}`
+        : "";
+
     const stmt = this.db.prepare(`
       SELECT * FROM posts 
       ${whereClause}
@@ -260,8 +313,22 @@ class DatabaseManager {
     return stmt.all(subreddit, limit);
   }
 
-  getPostCount(includeHidden = false) {
-    const whereClause = includeHidden ? "" : "WHERE hidden = 0";
+  getPostCount(includeHidden = false, includeRead = true) {
+    let whereConditions = [];
+
+    if (!includeHidden) {
+      whereConditions.push("hidden = 0");
+    }
+
+    if (!includeRead) {
+      whereConditions.push("read_at IS NULL");
+    }
+
+    const whereClause =
+      whereConditions.length > 0
+        ? `WHERE ${whereConditions.join(" AND ")}`
+        : "";
+
     const stmt = this.db.prepare(
       `SELECT COUNT(*) as count FROM posts ${whereClause}`
     );
@@ -659,6 +726,8 @@ class DatabaseManager {
       "terrorism",
       "cybersecurity",
       "privacy",
+      "human abuse",
+      "animal abuse",
     ];
 
     const existingTags = this.getTags();
@@ -800,6 +869,125 @@ class DatabaseManager {
     return stmt.all().map((row) => row.name);
   }
 
+  clearAndReseedTags() {
+    const transaction = this.db.transaction(() => {
+      // First, delete all existing post_tags relationships
+      this.db.prepare("DELETE FROM post_tags").run();
+
+      // Then delete all tags
+      this.db.prepare("DELETE FROM tags").run();
+
+      // Reset the auto-increment counter
+      this.db.prepare("DELETE FROM sqlite_sequence WHERE name = 'tags'").run();
+
+      // Now reseed with the predefined tags
+      const tags = [
+        "elon",
+        "trump",
+        "biden",
+        "politics",
+        "war",
+        "international affairs",
+        "election",
+        "covid",
+        "health pandemic",
+        "climate change",
+        "tesla",
+        "spacex",
+        "twitter",
+        "tech companies",
+        "artificial intelligence",
+        "cryptocurrency",
+        "economy",
+        "stock market",
+        "housing market",
+        "federal reserve",
+        "supreme court",
+        "congress",
+        "abortion",
+        "gun control",
+        "immigration",
+        "healthcare",
+        "social security",
+        "student loans",
+        "debt ceiling",
+        "government shutdown",
+        "criminal justice",
+        "police",
+        "crime",
+        "violence",
+        "protest",
+        "racism",
+        "discrimination",
+        "lgbtq",
+        "gender issues",
+        "natural disaster",
+        "celebrity",
+        "scandal",
+        "controversy",
+        "cancel culture",
+        "social media",
+        "misinformation",
+        "conspiracy",
+        "extremism",
+        "terrorism",
+        "cybersecurity",
+        "privacy",
+        "human abuse",
+        "animal abuse",
+      ];
+
+      this.addTags(tags);
+    });
+
+    transaction();
+    console.log("Tags table cleared and reseeded with predefined tags");
+    return this.getTags().length;
+  }
+
+  clearAllModerationData() {
+    const transaction = this.db.transaction(() => {
+      // Clear all post_categories relationships
+      this.db.prepare("DELETE FROM post_categories").run();
+
+      // Clear all post_tags relationships
+      this.db.prepare("DELETE FROM post_tags").run();
+
+      // Reset all posts to unhidden and clear moderation fields
+      this.db
+        .prepare(
+          `
+        UPDATE posts SET 
+          hidden = 0,
+          ai_explanation = NULL,
+          analyzed_at = NULL,
+          read_at = NULL
+      `
+        )
+        .run();
+
+      // Re-apply blocking rules based on current subreddit and keyword filters
+      this.updateExistingPostsHiddenStatus();
+    });
+
+    transaction();
+    console.log("All moderation data cleared and posts re-filtered");
+
+    // Get stats for the response
+    const totalPosts = this.getPostCount(true);
+    const hiddenPosts = this.getHiddenPostCount();
+    const visiblePosts = totalPosts - hiddenPosts;
+
+    return {
+      totalPosts,
+      hiddenPosts,
+      visiblePosts,
+      clearedCategories: true,
+      clearedTags: true,
+      reappliedFilters: true,
+    };
+  }
+
   isPostBlocked(post) {
     const blockedSubreddits = this.getBlockedSubreddits();
     const blockedKeywords = this.getBlockedKeywords();
@@ -818,6 +1006,110 @@ class DatabaseManager {
     }
 
     return false;
+  }
+
+  getUnanalyzedPosts(limit = 10) {
+    const stmt = this.db.prepare(`
+      SELECT * FROM posts 
+      WHERE analyzed_at IS NULL
+      ORDER BY created_utc DESC 
+      LIMIT ?
+    `);
+    return stmt.all(limit);
+  }
+
+  saveAnalysisResult(postId, matchesBlocked, categories, tags, explanation) {
+    const transaction = this.db.transaction(() => {
+      const updatePost = this.db.prepare(`
+        UPDATE posts 
+        SET ai_explanation = ?, 
+            analyzed_at = strftime('%s', 'now')
+        WHERE id = ?
+      `);
+      updatePost.run(explanation, postId);
+
+      const deleteExistingCategories = this.db.prepare(`
+        DELETE FROM post_categories WHERE post_id = ?
+      `);
+      deleteExistingCategories.run(postId);
+
+      const deleteExistingTags = this.db.prepare(`
+        DELETE FROM post_tags WHERE post_id = ?
+      `);
+      deleteExistingTags.run(postId);
+
+      if (categories && categories.length > 0) {
+        const insertCategory = this.db.prepare(`
+          INSERT INTO post_categories (post_id, category_id)
+          SELECT ?, id FROM categories WHERE name = ?
+        `);
+        for (const category of categories) {
+          try {
+            insertCategory.run(postId, category);
+          } catch (error) {
+            console.warn(`Category not found: ${category}`);
+          }
+        }
+      }
+
+      if (tags && tags.length > 0) {
+        const insertTag = this.db.prepare(`
+          INSERT INTO post_tags (post_id, tag_id)
+          SELECT ?, id FROM tags WHERE name = ?
+        `);
+        for (const tag of tags) {
+          try {
+            insertTag.run(postId, tag);
+          } catch (error) {
+            console.warn(`Tag not found: ${tag}`);
+          }
+        }
+      }
+    });
+
+    transaction();
+  }
+
+  getPostCategories(postId) {
+    const stmt = this.db.prepare(`
+      SELECT c.name FROM categories c
+      JOIN post_categories pc ON c.id = pc.category_id
+      WHERE pc.post_id = ?
+    `);
+    return stmt.all(postId).map((row) => row.name);
+  }
+
+  getPostTags(postId) {
+    const stmt = this.db.prepare(`
+      SELECT t.name FROM tags t
+      JOIN post_tags pt ON t.id = pt.tag_id
+      WHERE pt.post_id = ?
+    `);
+    return stmt.all(postId).map((row) => row.name);
+  }
+
+  markPostAsRead(postId) {
+    const stmt = this.db.prepare(`
+      UPDATE posts SET read_at = strftime('%s', 'now') WHERE id = ?
+    `);
+    return stmt.run(postId);
+  }
+
+  markPostsAsRead(postIds) {
+    if (!postIds || postIds.length === 0) return;
+
+    const placeholders = postIds.map(() => "?").join(",");
+    const stmt = this.db.prepare(`
+      UPDATE posts SET read_at = strftime('%s', 'now') WHERE id IN (${placeholders})
+    `);
+    return stmt.run(...postIds);
+  }
+
+  getReadPostCount() {
+    const stmt = this.db.prepare(
+      "SELECT COUNT(*) as count FROM posts WHERE read_at IS NOT NULL"
+    );
+    return stmt.get().count;
   }
 }
 

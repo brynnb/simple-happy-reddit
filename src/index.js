@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import DatabaseManager from "./database.js";
 import BlockingService from "./services/blocking-service.js";
+import AIAnalysisService from "./services/ai-analysis-service.js";
 import { scrapeReddit } from "./reddit-scraper.js";
 import { generateHTML } from "./templates/html-template.js";
 import { transformPostsForDisplay } from "./services/post-service.js";
@@ -12,6 +13,7 @@ const app = express();
 const port = process.env.PORT || 8080;
 const db = new DatabaseManager();
 const blockingService = new BlockingService(db);
+const aiAnalysisService = new AIAnalysisService(db);
 
 app.use(express.static("public"));
 app.use(express.json());
@@ -30,13 +32,30 @@ app.get("/", async (req, res) => {
       );
     }
 
-    const storedPosts = db.getPosts(100);
-    const postCount = db.getPostCount();
+    const storedPosts = db.getPosts(100, 0, false, false);
+    const postCount = db.getPostCount(false, false);
     const hiddenCount = db.getHiddenPostCount();
-    const posts = transformPostsForDisplay(storedPosts);
+    const readCount = db.getReadPostCount();
+    const posts = transformPostsForDisplay(storedPosts, db);
 
-    const html = generateHTML(posts, postCount, hiddenCount);
+    const html = generateHTML(
+      posts,
+      postCount,
+      hiddenCount,
+      "Simple Happy Reddit",
+      readCount
+    );
     res.send(html);
+
+    if (process.env.OPENAI_API_KEY) {
+      setImmediate(async () => {
+        try {
+          await aiAnalysisService.processAnalysisQueue(100);
+        } catch (error) {
+          console.error("AI analysis error:", error);
+        }
+      });
+    }
   } catch (error) {
     console.error("Error in route handler:", error);
     res.status(500).send(`
@@ -55,7 +74,7 @@ app.get("/", async (req, res) => {
 app.get("/hidden", async (req, res) => {
   try {
     const hiddenPosts = db.getPosts(100, 0, true).filter((post) => post.hidden);
-    const posts = transformPostsForDisplay(hiddenPosts);
+    const posts = transformPostsForDisplay(hiddenPosts, db);
     const hiddenCount = db.getHiddenPostCount();
 
     const html = generateHTML(posts, hiddenCount, 0, "Hidden Posts");
@@ -63,6 +82,58 @@ app.get("/hidden", async (req, res) => {
   } catch (error) {
     console.error("Error getting hidden posts:", error);
     res.status(500).json({ error: "Failed to get hidden posts" });
+  }
+});
+
+app.get("/read", async (req, res) => {
+  try {
+    const readPosts = db.db
+      .prepare(
+        `
+      SELECT * FROM posts 
+      WHERE read_at IS NOT NULL 
+      ORDER BY read_at DESC, score DESC 
+      LIMIT 100
+    `
+      )
+      .all();
+
+    const posts = transformPostsForDisplay(readPosts, db);
+    const readCount = db.getReadPostCount();
+
+    const html = generateHTML(posts, readCount, 0, "Read Posts");
+    res.send(html);
+  } catch (error) {
+    console.error("Error getting read posts:", error);
+    res.status(500).json({ error: "Failed to get read posts" });
+  }
+});
+
+app.get("/analyzed", async (req, res) => {
+  try {
+    const analyzedPosts = db.db
+      .prepare(
+        `
+      SELECT * FROM posts 
+      WHERE analyzed_at IS NOT NULL 
+      ORDER BY analyzed_at DESC, score DESC 
+      LIMIT 100
+    `
+      )
+      .all();
+
+    const posts = transformPostsForDisplay(analyzedPosts, db);
+    const analyzedCount = db.db
+      .prepare(
+        "SELECT COUNT(*) as count FROM posts WHERE analyzed_at IS NOT NULL"
+      )
+      .get().count;
+
+    const html = generateHTML(posts, analyzedCount, 0, "AI Analyzed Posts");
+    res.send(html);
+  } catch (error) {
+    console.error("Error getting analyzed posts:", error);
+    res.status(500).json({ error: "Failed to get analyzed posts" });
   }
 });
 
@@ -77,16 +148,39 @@ app.post("/api/posts/:id/toggle", (req, res) => {
   }
 });
 
+app.post("/api/posts/mark-read", async (req, res) => {
+  try {
+    const { postIds } = req.body;
+    if (!postIds || !Array.isArray(postIds) || postIds.length === 0) {
+      return res.status(400).json({ error: "postIds array is required" });
+    }
+
+    db.markPostsAsRead(postIds);
+    await db.uploadDatabaseToCloud();
+
+    res.json({
+      success: true,
+      message: `Marked ${postIds.length} posts as read`,
+      markedCount: postIds.length,
+    });
+  } catch (error) {
+    console.error("Error marking posts as read:", error);
+    res.status(500).json({ error: "Failed to mark posts as read" });
+  }
+});
+
 app.get("/api/stats", (req, res) => {
   try {
-    const totalPosts = db.getPostCount(true);
-    const visiblePosts = db.getPostCount(false);
+    const totalPosts = db.getPostCount(true, true);
+    const visiblePosts = db.getPostCount(false, false);
     const hiddenPosts = db.getHiddenPostCount();
+    const readPosts = db.getReadPostCount();
 
     res.json({
       total: totalPosts,
       visible: visiblePosts,
       hidden: hiddenPosts,
+      read: readPosts,
     });
   } catch (error) {
     console.error("Error getting stats:", error);
@@ -171,6 +265,65 @@ app.delete("/api/blocked/keywords/:keyword", (req, res) => {
   } catch (error) {
     console.error("Error removing blocked keyword:", error);
     res.status(500).json({ error: "Failed to remove blocked keyword" });
+  }
+});
+
+app.post("/api/analyze", async (req, res) => {
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(400).json({ error: "OpenAI API key not configured" });
+    }
+
+    const { limit } = req.body;
+    const analysisLimit = Math.min(limit || 100, 200);
+
+    const result = await aiAnalysisService.processAnalysisQueue(analysisLimit);
+
+    res.json({
+      success: true,
+      processed: result.processed,
+      errors: result.errors,
+      message: `Analyzed ${result.processed} posts with ${result.errors} errors`,
+    });
+  } catch (error) {
+    console.error("Error running AI analysis:", error);
+    res.status(500).json({ error: "Failed to run AI analysis" });
+  }
+});
+
+app.get("/api/analysis/stats", (req, res) => {
+  try {
+    const totalPosts = db.getPostCount(true);
+    const analyzedStmt = db.db.prepare(
+      "SELECT COUNT(*) as count FROM posts WHERE analyzed_at IS NOT NULL"
+    );
+    const analyzedCount = analyzedStmt.get().count;
+    const unanalyzedCount = totalPosts - analyzedCount;
+
+    res.json({
+      total: totalPosts,
+      analyzed: analyzedCount,
+      unanalyzed: unanalyzedCount,
+    });
+  } catch (error) {
+    console.error("Error getting analysis stats:", error);
+    res.status(500).json({ error: "Failed to get analysis stats" });
+  }
+});
+
+app.post("/api/moderation/clear", async (req, res) => {
+  try {
+    const result = db.clearAllModerationData();
+    await db.uploadDatabaseToCloud();
+
+    res.json({
+      success: true,
+      message: "All moderation data cleared successfully",
+      stats: result,
+    });
+  } catch (error) {
+    console.error("Error clearing moderation data:", error);
+    res.status(500).json({ error: "Failed to clear moderation data" });
   }
 });
 
