@@ -115,9 +115,27 @@ class DatabaseManager {
       )
     `;
 
+    const createCategoriesTable = `
+      CREATE TABLE IF NOT EXISTS categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        created_at INTEGER DEFAULT (strftime('%s', 'now'))
+      )
+    `;
+
+    const createTagsTable = `
+      CREATE TABLE IF NOT EXISTS tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        created_at INTEGER DEFAULT (strftime('%s', 'now'))
+      )
+    `;
+
     this.db.exec(createPostsTable);
     this.db.exec(createBlockedSubredditsTable);
     this.db.exec(createBlockedKeywordsTable);
+    this.db.exec(createCategoriesTable);
+    this.db.exec(createTagsTable);
 
     this.addHiddenColumnIfNotExists();
 
@@ -129,10 +147,14 @@ class DatabaseManager {
       CREATE INDEX IF NOT EXISTS idx_posts_hidden ON posts(hidden);
       CREATE INDEX IF NOT EXISTS idx_blocked_subreddits ON blocked_subreddits(subreddit);
       CREATE INDEX IF NOT EXISTS idx_blocked_keywords ON blocked_keywords(keyword);
+      CREATE INDEX IF NOT EXISTS idx_categories ON categories(name);
+      CREATE INDEX IF NOT EXISTS idx_tags ON tags(name);
     `;
 
     this.db.exec(createIndexes);
     this.initializeBlockedItems();
+    this.initializeCategories();
+    this.initializeTags();
     this.updateExistingPostsHiddenStatus();
   }
 
@@ -568,6 +590,84 @@ class DatabaseManager {
     }
   }
 
+  initializeCategories() {
+    const categories = [
+      "Politics",
+      "Violence",
+      "Social Issues",
+      "Mean Stuff",
+      "Unpleasant",
+    ];
+
+    const existingCategories = this.getCategories();
+
+    if (existingCategories.length === 0) {
+      this.addCategories(categories);
+    }
+  }
+
+  initializeTags() {
+    const tags = [
+      "elon",
+      "trump",
+      "biden",
+      "politics",
+      "war",
+      "international affairs",
+      "election",
+      "covid",
+      "health pandemic",
+      "climate change",
+      "tesla",
+      "spacex",
+      "twitter",
+      "tech companies",
+      "artificial intelligence",
+      "cryptocurrency",
+      "economy",
+      "stock market",
+      "housing market",
+      "federal reserve",
+      "supreme court",
+      "congress",
+      "abortion",
+      "gun control",
+      "immigration",
+      "healthcare",
+      "social security",
+      "student loans",
+      "debt ceiling",
+      "government shutdown",
+      "criminal justice",
+      "police",
+      "crime",
+      "violence",
+      "protest",
+      "racism",
+      "discrimination",
+      "lgbtq",
+      "gender issues",
+      "natural disaster",
+      "celebrity",
+      "scandal",
+      "controversy",
+      "cancel culture",
+      "social media",
+      "misinformation",
+      "conspiracy",
+      "extremism",
+      "terrorism",
+      "cybersecurity",
+      "privacy",
+    ];
+
+    const existingTags = this.getTags();
+
+    if (existingTags.length === 0) {
+      this.addTags(tags);
+    }
+  }
+
   addBlockedSubreddit(subreddit) {
     const stmt = this.db.prepare(`
       INSERT OR IGNORE INTO blocked_subreddits (subreddit) VALUES (?)
@@ -632,6 +732,72 @@ class DatabaseManager {
       SELECT keyword FROM blocked_keywords ORDER BY keyword
     `);
     return stmt.all().map((row) => row.keyword);
+  }
+
+  addCategory(name) {
+    const stmt = this.db.prepare(`
+      INSERT OR IGNORE INTO categories (name) VALUES (?)
+    `);
+    return stmt.run(name);
+  }
+
+  addCategories(categories) {
+    const stmt = this.db.prepare(`
+      INSERT OR IGNORE INTO categories (name) VALUES (?)
+    `);
+    const transaction = this.db.transaction((categories) => {
+      for (const category of categories) {
+        stmt.run(category);
+      }
+    });
+    return transaction(categories);
+  }
+
+  removeCategory(name) {
+    const stmt = this.db.prepare(`
+      DELETE FROM categories WHERE name = ?
+    `);
+    return stmt.run(name);
+  }
+
+  getCategories() {
+    const stmt = this.db.prepare(`
+      SELECT name FROM categories ORDER BY name
+    `);
+    return stmt.all().map((row) => row.name);
+  }
+
+  addTag(name) {
+    const stmt = this.db.prepare(`
+      INSERT OR IGNORE INTO tags (name) VALUES (?)
+    `);
+    return stmt.run(name);
+  }
+
+  addTags(tags) {
+    const stmt = this.db.prepare(`
+      INSERT OR IGNORE INTO tags (name) VALUES (?)
+    `);
+    const transaction = this.db.transaction((tags) => {
+      for (const tag of tags) {
+        stmt.run(tag);
+      }
+    });
+    return transaction(tags);
+  }
+
+  removeTag(name) {
+    const stmt = this.db.prepare(`
+      DELETE FROM tags WHERE name = ?
+    `);
+    return stmt.run(name);
+  }
+
+  getTags() {
+    const stmt = this.db.prepare(`
+      SELECT name FROM tags ORDER BY name
+    `);
+    return stmt.all().map((row) => row.name);
   }
 
   isPostBlocked(post) {
