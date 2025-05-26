@@ -113,9 +113,13 @@ Note: If an image is included with this post, analyze both the text content and 
 
 SPECIFIC CATEGORIZATION RULES:
 - "Mean Stuff": Include content making fun of someone (anyone) or showing someone being unkind to someone else, unless it's entirely humorous and done playfully
-- "Unpleasant": Includes a person or animal being hurt/suffering but they're better now/healed/have new parents/owners
+- "Unpleasant": Includes a person or animal being hurt/suffering but they're better now/healed/have new parents/owners. Be sure to not overuse this tag. It should be applied to stuff that is graphic, scary, or about a subject that most people would find uncomfortable.
 - "Violence": Includes criminal justice, prison, policing content, people fighting, people damaging property
 - "Politics": If criminal justice/prison/policing involves a political figure, also add this category
+
+If a post is clearly done in humor, for example a joke about a cat being arrested, this does not qualify as "police", "violent", or "unpleasant" tags. Same for categories. This is a specific example but this logic should apply to all posts that are entirely humorous and not actually mean.
+
+ONLY CATEGORIZE AND TAG STUFF SPARINGLING AND WHEN YOU'RE VERY CONFIDENT ABOUT IT BEING SOMETHING MOST PEOPLE WOULD WANT TO FILTER OUT.
 
 Please respond with ONLY a JSON object in this exact format:
 {
@@ -129,7 +133,7 @@ Rules:
 2. Only include tags from the available list that apply
 3. Keep explanation under 200 characters
 4. Categories and tags arrays can be empty if none apply
-5. Consider both textual and visual content when analyzing image posts
+5. Consider both the posts's title and the image's textual and visual content when analyzing image posts
 6. Follow the specific categorization rules above for content classification
     `.trim();
   }

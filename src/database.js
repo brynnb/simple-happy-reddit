@@ -1011,8 +1011,10 @@ class DatabaseManager {
   getUnanalyzedPosts(limit = 10) {
     const stmt = this.db.prepare(`
       SELECT * FROM posts 
-      WHERE analyzed_at IS NULL
-      ORDER BY created_utc DESC 
+      WHERE analyzed_at IS NULL 
+        AND hidden = 0 
+        AND read_at IS NULL
+      ORDER BY score DESC, created_utc DESC 
       LIMIT ?
     `);
     return stmt.all(limit);

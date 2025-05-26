@@ -333,13 +333,13 @@ export function generateHTML(
             // Monitor scroll position to enable/disable read tracking
             function checkScrollPosition() {
               const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+              const wasAtTop = isAtTop;
               isAtTop = scrollTop < 50; // Consider "at top" if within 50px of top
               
-              if (isAtTop && !readTrackingEnabled) {
+              // Enable read tracking when user starts scrolling down from the top
+              if (wasAtTop && !isAtTop && !readTrackingEnabled) {
                 readTrackingEnabled = true;
-                console.log('Read tracking enabled - page is at top');
-              } else if (!isAtTop && readTrackingEnabled) {
-                // Don't disable once enabled, just track the state
+                console.log('Read tracking enabled - user started scrolling down');
               }
             }
             
@@ -508,6 +508,19 @@ export function generateHTML(
                 debugInfo.classList.remove('visible');
               }
             });
+            
+            // Save state to localStorage
+            localStorage.setItem('debugInfoVisible', debugToggle.checked);
+          }
+          
+          function loadDebugInfoState() {
+            const debugToggle = document.getElementById('debugToggle');
+            const savedState = localStorage.getItem('debugInfoVisible');
+            
+            if (savedState === 'true') {
+              debugToggle.checked = true;
+              toggleDebugInfo();
+            }
           }
           
           function clearModerationData() {
@@ -583,6 +596,7 @@ export function generateHTML(
           
           document.addEventListener('DOMContentLoaded', function() {
             loadBlockedSubreddits();
+            loadDebugInfoState();
             
             // Small delay to ensure page is fully loaded before initializing read tracking
             setTimeout(function() {
@@ -727,7 +741,9 @@ export function generateHTML(
                   /"/g,
                   "&quot;"
                 )}</div>`
-                    : '<div class="debug-content">No AI explanation available</div>'
+                    : post.analyzedAt
+                    ? '<div class="debug-content">No AI explanation available</div>'
+                    : '<div class="debug-content">Not yet analyzed</div>'
                 }
               </div>
             </div>

@@ -22,14 +22,47 @@ await db.initialize();
 
 app.get("/", async (req, res) => {
   try {
-    const { postsToSave } = await scrapeReddit();
+    let attempts = 0;
+    const maxAttempts = 5;
+    let after = null;
 
-    if (postsToSave.length > 0) {
-      await db.savePosts(postsToSave);
-      const stats = blockingService.getPostStats(postsToSave);
+    // Keep fetching until we have at least 100 visible unread posts or hit max attempts
+    while (attempts < maxAttempts) {
+      const visibleUnreadCount = db.getPostCount(false, false);
+
+      if (visibleUnreadCount >= 100) {
+        console.log(
+          `Have ${visibleUnreadCount} visible unread posts, no need to fetch more`
+        );
+        break;
+      }
+
       console.log(
-        `Saved ${stats.total} posts to database (${stats.hiddenCount} hidden, ${stats.visibleCount} visible)`
+        `Only ${visibleUnreadCount} visible unread posts, fetching more from Reddit (attempt ${
+          attempts + 1
+        }/${maxAttempts})`
       );
+
+      const { postsToSave, after: nextAfter } = await scrapeReddit(after);
+
+      if (postsToSave.length > 0) {
+        await db.savePosts(postsToSave);
+        const stats = blockingService.getPostStats(postsToSave);
+        console.log(
+          `Saved ${stats.total} posts to database (${stats.hiddenCount} hidden, ${stats.visibleCount} visible)`
+        );
+        after = nextAfter;
+      } else {
+        console.log("No new posts fetched, stopping attempts");
+        break;
+      }
+
+      if (!nextAfter) {
+        console.log("No more pages available, stopping attempts");
+        break;
+      }
+
+      attempts++;
     }
 
     const storedPosts = db.getPosts(100, 0, false, false);

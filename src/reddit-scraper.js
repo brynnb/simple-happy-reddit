@@ -1,17 +1,19 @@
 import fetch from "node-fetch";
 import { formatSelfText, detectMediaType } from "./utils/formatters.js";
 
-export async function scrapeReddit() {
+export async function scrapeReddit(after = null) {
   try {
-    const response = await fetch(
-      "https://www.reddit.com/r/all.json?limit=100",
-      {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        },
-      }
-    );
+    let url = "https://www.reddit.com/r/all.json?limit=100";
+    if (after) {
+      url += `&after=${after}`;
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+      },
+    });
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -74,9 +76,9 @@ export async function scrapeReddit() {
       }
     });
 
-    return { posts, postsToSave };
+    return { posts, postsToSave, after: data.data.after };
   } catch (error) {
     console.error("Error scraping Reddit:", error);
-    return { posts: [], postsToSave: [] };
+    return { posts: [], postsToSave: [], after: null };
   }
 }

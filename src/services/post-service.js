@@ -14,6 +14,7 @@ export function transformPostsForDisplay(storedPosts, db = null) {
       media: post.media_data ? JSON.parse(post.media_data) : null,
       subreddit: post.subreddit,
       aiExplanation: post.ai_explanation || null,
+      analyzedAt: post.analyzed_at || null,
     };
 
     if (db && post.analyzed_at) {
