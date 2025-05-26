@@ -1,6 +1,8 @@
 # Simple Happy Reddit
 
-A Node.js/Express project that deploys to Google Cloud Run.
+![Screenshot](screenshot.png)
+
+A curated Reddit reader that fetches posts from r/all, filters out unwanted content, and provides AI-powered analysis. Features include keyword/subreddit blocking, read/unread tracking, and OpenAI integration for content analysis and moderation.
 
 ## Setup Instructions
 
@@ -85,6 +87,14 @@ gcloud run services update simple-happy-reddit \
 - Static file serving from `public/` directory
 - Environment variable support
 - Nodemon for local development
+
+## TODO
+
+- [ ] Post top comments inline
+- [ ] Provide AI summary of top comments
+- [ ] Implement OpenAI's free moderation API endpoint as an extra free layer of filtering
+- [ ] Provide AI summary of websites that are linked to as the content of a Reddit post
+- [ ] Provide AI fact checking of post titles and content and articles
 
 ## Deployment Flow
 
