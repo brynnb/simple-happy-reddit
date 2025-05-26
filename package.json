@@ -1,0 +1,24 @@
+{
+    "type": "module",
+    "name": "simple-happy-reddit",
+    "version": "1.0.0",
+    "main": "src/index.js",
+    "scripts": {
+        "dev": "nodemon src/index.js",
+        "start": "node src/index.js",
+        "deploy": "gcloud builds submit --tag gcr.io/$(gcloud config get-value project)/simple-happy-reddit && gcloud run deploy simple-happy-reddit --image gcr.io/$(gcloud config get-value project)/simple-happy-reddit --platform managed --region us-central1 --allow-unauthenticated"
+    },
+    "dependencies": {
+        "@google-cloud/storage": "^7.16.0",
+        "better-sqlite3": "^11.10.0",
+        "cheerio": "^1.0.0",
+        "dotenv": "^16.4.7",
+        "express": "^4.21.2",
+        "node-fetch": "^3.3.2",
+        "openai": "^4.98.0",
+        "sqlite3": "^5.1.7"
+    },
+    "devDependencies": {
+        "nodemon": "^3.0.2"
+    }
+}
