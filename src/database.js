@@ -277,7 +277,13 @@ class DatabaseManager {
     return result;
   }
 
-  getPosts(limit = 100, offset = 0, includeHidden = false, includeRead = true) {
+  getPosts(
+    limit = 100,
+    offset = 0,
+    includeHidden = false,
+    includeRead = true,
+    prioritizeAnalyzed = false
+  ) {
     let whereConditions = [];
 
     if (!includeHidden) {
@@ -293,10 +299,19 @@ class DatabaseManager {
         ? `WHERE ${whereConditions.join(" AND ")}`
         : "";
 
+    let orderClause;
+    if (prioritizeAnalyzed) {
+      // Show analyzed posts first (sorted by score), then unanalyzed posts (sorted by score)
+      orderClause =
+        "ORDER BY (analyzed_at IS NOT NULL) DESC, score DESC, created_utc DESC";
+    } else {
+      orderClause = "ORDER BY score DESC, created_utc DESC";
+    }
+
     const stmt = this.db.prepare(`
       SELECT * FROM posts 
       ${whereClause}
-      ORDER BY score DESC, created_utc DESC 
+      ${orderClause}
       LIMIT ? OFFSET ?
     `);
     return stmt.all(limit, offset);
@@ -719,7 +734,7 @@ class DatabaseManager {
       "cryptocurrency",
       "economy",
       "hate speech",
-      "government policy",
+      "government",
       "criminal justice",
       "police",
       "crime",
@@ -732,9 +747,17 @@ class DatabaseManager {
       "natural disaster",
 
       "controversy",
-
+      "gossip",
       "misinformation",
-
+      "tv shows",
+      "movies",
+      "music",
+      "books",
+      "art",
+      "food",
+      "travel",
+      "video games",
+      "sports",
       "human abuse",
       "animal abuse",
     ];
@@ -969,6 +992,73 @@ class DatabaseManager {
 
     return {
       totalPosts,
+      hiddenPosts,
+      visiblePosts,
+      clearedCategories: true,
+      clearedTags: true,
+      reappliedFilters: true,
+    };
+  }
+
+  clearUnreadModerationData() {
+    const transaction = this.db.transaction(() => {
+      // Get unread post IDs first
+      const unreadPostIds = this.db
+        .prepare("SELECT id FROM posts WHERE read_at IS NULL")
+        .all()
+        .map((row) => row.id);
+
+      if (unreadPostIds.length === 0) {
+        return;
+      }
+
+      const placeholders = unreadPostIds.map(() => "?").join(",");
+
+      // Clear post_categories relationships for unread posts only
+      this.db
+        .prepare(
+          `DELETE FROM post_categories WHERE post_id IN (${placeholders})`
+        )
+        .run(...unreadPostIds);
+
+      // Clear post_tags relationships for unread posts only
+      this.db
+        .prepare(`DELETE FROM post_tags WHERE post_id IN (${placeholders})`)
+        .run(...unreadPostIds);
+
+      // Reset unread posts to unhidden and clear moderation fields
+      this.db
+        .prepare(
+          `UPDATE posts SET 
+            hidden = 0,
+            ai_explanation = NULL,
+            analyzed_at = NULL
+          WHERE read_at IS NULL`
+        )
+        .run();
+
+      // Re-apply blocking rules based on current subreddit and keyword filters
+      this.updateExistingPostsHiddenStatus();
+    });
+
+    transaction();
+    console.log("Unread moderation data cleared and posts re-filtered");
+
+    // Get stats for the response
+    const totalPosts = this.getPostCount(true, true);
+    const clearedPosts = this.db
+      .prepare("SELECT COUNT(*) as count FROM posts WHERE read_at IS NULL")
+      .get().count;
+    const preservedPosts = this.db
+      .prepare("SELECT COUNT(*) as count FROM posts WHERE read_at IS NOT NULL")
+      .get().count;
+    const hiddenPosts = this.getHiddenPostCount();
+    const visiblePosts = totalPosts - hiddenPosts;
+
+    return {
+      totalPosts,
+      clearedPosts,
+      preservedPosts,
       hiddenPosts,
       visiblePosts,
       clearedCategories: true,

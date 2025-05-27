@@ -119,7 +119,13 @@ SPECIFIC CATEGORIZATION RULES:
 
 If a post is clearly done in humor, then it may not be appropriate to categorize it as violence or unpleasant. Any political content should be tagged as politicalregardless of humor. 
 
-ONLY CATEGORIZE AND TAG STUFF SPARINGLING AND WHEN YOU'RE VERY CONFIDENT ABOUT IT.
+ONLY CATEGORIZE AND TAG STUFF SPARINGLING AND WHEN YOU'RE VERY CONFIDENT ABOUT IT. 
+
+For example, just because a post mentions a dog, doesn't mean we should apply the tag "animal abuse". Or just beacuse it's a cool weapons demonstration doesn't mean we should label it unpleasant or violent.
+
+If a post mentions the president or our elected person in any negative way, or mentions "orange man" or "cheeto", assume it is about trump and apply the trump tag. 
+
+Apply the "elon" tag to anything related to spacex, tesla, solar city, electric cars, cyber truck, twitter/x, DOGE, the Boring Company, Optimus robots, or dogecoin. 
 
 Please respond with ONLY a JSON object in this exact format:
 {

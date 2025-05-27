@@ -65,7 +65,7 @@ app.get("/", async (req, res) => {
       attempts++;
     }
 
-    const storedPosts = db.getPosts(100, 0, false, false);
+    const storedPosts = db.getPosts(100, 0, false, false, true);
     const postCount = db.getPostCount(false, false);
     const hiddenCount = db.getHiddenPostCount();
     const readCount = db.getReadPostCount();
@@ -397,6 +397,22 @@ app.post("/api/moderation/clear", async (req, res) => {
   } catch (error) {
     console.error("Error clearing moderation data:", error);
     res.status(500).json({ error: "Failed to clear moderation data" });
+  }
+});
+
+app.post("/api/moderation/clear-unread", async (req, res) => {
+  try {
+    const result = db.clearUnreadModerationData();
+    await db.uploadDatabaseToCloud();
+
+    res.json({
+      success: true,
+      message: "Unread moderation data cleared successfully",
+      stats: result,
+    });
+  } catch (error) {
+    console.error("Error clearing unread moderation data:", error);
+    res.status(500).json({ error: "Failed to clear unread moderation data" });
   }
 });
 

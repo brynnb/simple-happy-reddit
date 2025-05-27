@@ -675,6 +675,78 @@ export function generateHTML(
             });
           }
 
+          function clearUnreadModerationData() {
+            const confirmed = confirm(
+              'Are you sure you want to delete moderation data for UNREAD posts only?\\n\\n' +
+              'This will:\\n' +
+              '• Clear AI analysis results for unread posts\\n' +
+              '• Remove categories and tags from unread posts\\n' +
+              '• Reset unread posts to visible\\n' +
+              '• Re-apply subreddit and keyword filters\\n' +
+              '• Preserve all data for read posts\\n\\n' +
+              'This action cannot be undone!'
+            );
+            
+            if (!confirmed) {
+              return;
+            }
+            
+            const button = document.getElementById('clearUnreadModerationBtn');
+            const originalText = button.textContent;
+            button.textContent = 'Clearing...';
+            button.disabled = true;
+            button.style.backgroundColor = '#6c757d';
+            
+            fetch('/api/moderation/clear-unread', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              }
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                const notification = document.createElement('div');
+                notification.style.cssText = 
+                  'position: fixed;' +
+                  'top: 20px;' +
+                  'right: 20px;' +
+                  'background: #28a745;' +
+                  'color: white;' +
+                  'padding: 15px 20px;' +
+                  'border-radius: 5px;' +
+                  'z-index: 1000;' +
+                  'font-size: 14px;' +
+                  'box-shadow: 0 2px 10px rgba(0,0,0,0.2);' +
+                  'max-width: 300px;' +
+                  'line-height: 1.4;';
+                notification.innerHTML = 
+                  '<strong>Unread moderation data cleared!</strong><br>' +
+                  'Cleared: ' + data.stats.clearedPosts + ' posts<br>' +
+                  'Preserved: ' + data.stats.preservedPosts + ' read posts<br>' +
+                  'Visible: ' + data.stats.visiblePosts + '<br>' +
+                  'Hidden: ' + data.stats.hiddenPosts;
+                document.body.appendChild(notification);
+                
+                setTimeout(function() {
+                  notification.remove();
+                  window.location.reload();
+                }, 3000);
+              } else {
+                alert('Failed to clear unread moderation data: ' + (data.error || 'Unknown error'));
+              }
+            })
+            .catch(error => {
+              console.error('Error:', error);
+              alert('Failed to clear unread moderation data');
+            })
+            .finally(() => {
+              button.textContent = originalText;
+              button.disabled = false;
+              button.style.backgroundColor = '#fd7e14';
+            });
+          }
+
           function reinitializeTags() {
             const confirmed = confirm(
               'Are you sure you want to reinitialize all tags?\\n\\n' +
@@ -820,6 +892,24 @@ export function generateHTML(
             onmouseout="this.style.backgroundColor='#ffc107'"
           >
             Reinitialize All Tags
+          </button>
+          <button 
+            id="clearUnreadModerationBtn" 
+            onclick="clearUnreadModerationData()" 
+            style="
+              background: #fd7e14; 
+              color: white; 
+              border: none; 
+              padding: 8px 16px; 
+              border-radius: 4px; 
+              font-size: 12px; 
+              cursor: pointer;
+              transition: background-color 0.2s ease;
+            "
+            onmouseover="this.style.backgroundColor='#e8590c'"
+            onmouseout="this.style.backgroundColor='#fd7e14'"
+          >
+            Delete Unread Moderation Data
           </button>
           <button 
             id="clearModerationBtn" 
