@@ -112,14 +112,14 @@ AVAILABLE TAGS: ${tags.join(", ")}
 Note: If an image is included with this post, analyze both the text content and the visual content of the image.
 
 SPECIFIC CATEGORIZATION RULES:
-- "Mean Stuff": Include content making fun of someone (anyone) or showing someone being unkind to someone else, unless it's entirely humorous and done playfully
-- "Unpleasant": Includes mentions of a humans or animals having suffered or died in any way.
-- "Violence": Includes criminal justice, prison, policing content, people fighting, people damaging property
-- "Politics": Includes content about criminal justice/prison/policing. Also includes any mention or reference to any political figure or political event. 
+- "Mean Stuff": Mean stuff includes content that is mocking, ridiculing, harassing, disparaging, or teasing - unless it's entirely humorous and done playfully and doesn't involve any public or political figures
+- "Unpleasant": Unpleasant includes mentions of real humans or real animals having suffered or died. Unpleasant also includes mentions of death, divorce, war, health issues, health conditions, malformations, amputation, loss, sorrow, and grief.
+- "Violence": Violence includes criminal justice, prison, policing content, people fighting, people damaging property
+- "Politics": Politics includes content about criminal justice/prison/policing. Also includes any mention or reference to any political figure or political event. 
 
-If a post is clearly done in humor, then it may not be appropriate to categorize it as violence or unpleasant. Any political content should be tagged regardless of humor. 
+If a post is clearly done in humor, then it may not be appropriate to categorize it as violence or unpleasant. Any political content should be tagged as politicalregardless of humor. 
 
-ONLY CATEGORIZE AND TAG STUFF SPARINGLING AND WHEN YOU'RE VERY CONFIDENT ABOUT IT BEING SOMETHING MOST PEOPLE WOULD WANT TO FILTER OUT.
+ONLY CATEGORIZE AND TAG STUFF SPARINGLING AND WHEN YOU'RE VERY CONFIDENT ABOUT IT.
 
 Please respond with ONLY a JSON object in this exact format:
 {

@@ -41,8 +41,7 @@ export function formatTimeAgo(createdUtc) {
 }
 
 export function detectMediaType(url, post) {
-  if (!url) return null;
-
+  // Check for Reddit video first (can exist on self posts too)
   if (post.is_video && post.media && post.media.reddit_video) {
     return {
       type: "reddit_video",
@@ -52,6 +51,40 @@ export function detectMediaType(url, post) {
     };
   }
 
+  // Check for embedded media in self posts
+  if (
+    post.is_self &&
+    post.media &&
+    post.media.oembed &&
+    post.media.oembed.thumbnail_url
+  ) {
+    return {
+      type: "image",
+      url: post.media.oembed.thumbnail_url,
+    };
+  }
+
+  // Check for preview images on self posts
+  if (
+    post.is_self &&
+    post.preview &&
+    post.preview.images &&
+    post.preview.images.length > 0
+  ) {
+    const previewImage = post.preview.images[0];
+    if (previewImage.source && previewImage.source.url) {
+      return {
+        type: "image",
+        url: previewImage.source.url.replace(/&amp;/g, "&"),
+        width: previewImage.source.width,
+        height: previewImage.source.height,
+      };
+    }
+  }
+
+  if (!url) return null;
+
+  // Check for galleries (can exist on self posts too)
   if (post.is_gallery && post.media_metadata) {
     const images = [];
     if (post.gallery_data && post.gallery_data.items) {

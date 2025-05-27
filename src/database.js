@@ -359,16 +359,41 @@ class DatabaseManager {
   }
 
   hidePostsByKeyword(keyword) {
-    const stmt = this.db.prepare(`
-      UPDATE posts SET hidden = 1 
-      WHERE LOWER(title) LIKE LOWER(?) OR LOWER(self_text) LIKE LOWER(?)
-    `);
-    const keywordPattern = `%${keyword}%`;
-    const result = stmt.run(keywordPattern, keywordPattern);
-    console.log(
-      `Hidden ${result.changes} posts containing keyword: ${keyword}`
+    // Get all posts and check them with the same word boundary logic
+    const allPosts = this.db
+      .prepare("SELECT id, title, self_text FROM posts")
+      .all();
+    const postsToHide = [];
+
+    // Use word boundary regex to match whole words only
+    const regex = new RegExp(
+      `\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+      "i"
     );
-    return result;
+
+    for (const post of allPosts) {
+      const titleLower = post.title.toLowerCase();
+      const selfTextLower = post.self_text ? post.self_text.toLowerCase() : "";
+
+      if (regex.test(titleLower) || regex.test(selfTextLower)) {
+        postsToHide.push(post.id);
+      }
+    }
+
+    if (postsToHide.length > 0) {
+      const placeholders = postsToHide.map(() => "?").join(",");
+      const stmt = this.db.prepare(`
+        UPDATE posts SET hidden = 1 WHERE id IN (${placeholders})
+      `);
+      const result = stmt.run(...postsToHide);
+      console.log(
+        `Hidden ${result.changes} posts containing keyword: ${keyword}`
+      );
+      return result;
+    } else {
+      console.log(`No posts found containing keyword: ${keyword}`);
+      return { changes: 0 };
+    }
   }
 
   updateExistingPostsHiddenStatus() {
@@ -533,14 +558,14 @@ class DatabaseManager {
       "under investigation",
       "white supremacy",
       "vaccine",
-      " daca ",
+      "daca",
       "democrats",
       "prosecutors",
       "climate change",
       "global warming",
       "capitol riot",
       "probation officer",
-      " bail ",
+      "bail",
       "leaked documents",
       "pandemic",
       "lab leak",
@@ -643,6 +668,7 @@ class DatabaseManager {
       "bigotry",
       "ukraine",
       "government",
+      "rape",
     ];
 
     const existingSubreddits = this.getBlockedSubreddits();
@@ -897,6 +923,8 @@ class DatabaseManager {
         "misinformation",
         "human abuse",
         "animal abuse",
+        "medical issues",
+        "activism",
       ];
 
       this.addTags(tags);
@@ -961,7 +989,14 @@ class DatabaseManager {
     const selfTextLower = post.self_text ? post.self_text.toLowerCase() : "";
 
     for (const keyword of blockedKeywords) {
-      if (titleLower.includes(keyword) || selfTextLower.includes(keyword)) {
+      // Use word boundary regex to match whole words only
+      // This prevents "rape" from matching "grape" but allows "gang-rape"
+      const regex = new RegExp(
+        `\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+        "i"
+      );
+
+      if (regex.test(titleLower) || regex.test(selfTextLower)) {
         return true;
       }
     }

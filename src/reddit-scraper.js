@@ -39,10 +39,12 @@ export async function scrapeReddit(after = null) {
         const commentsUrl = `https://old.reddit.com${post.permalink}`;
 
         let selfText = null;
-        if (post.is_self && post.selftext && post.selftext.trim()) {
+        if (post.selftext && post.selftext.trim()) {
           selfText = formatSelfText(post.selftext);
         }
 
+        // Check for media regardless of whether it's a self post
+        // Self posts can now have embedded images/videos
         const media = detectMediaType(post.url, post);
 
         const postData = {

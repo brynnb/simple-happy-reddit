@@ -114,10 +114,9 @@ export function generateHTML(
             font-size: 14px;
             line-height: 1.5;
             margin-top: 10px;
-            padding: 10px;
+            padding: 6px 10px;
             background-color: #f8f9fa;
             border-radius: 4px;
-            white-space: pre-wrap;
             word-wrap: break-word;
           }
           .self-text.expandable {
@@ -312,6 +311,11 @@ export function generateHTML(
           let isAtTop = true;
           let readTrackingEnabled = false;
           
+          // Batching variables for mark as read
+          let pendingReadPostIds = new Set();
+          let markAsReadTimer = null;
+          const MARK_AS_READ_BATCH_DELAY = 5000; // 5 seconds
+          
           function loadBlockedSubreddits() {
             fetch('/api/blocked/subreddits')
               .then(response => response.json())
@@ -394,12 +398,35 @@ export function generateHTML(
             const postsToMarkRead = allPosts.slice(0, currentPostIndex + 1);
             const postIds = postsToMarkRead
               .map(post => post.dataset.postId)
-              .filter(id => !readPosts.has(id));
+              .filter(id => !readPosts.has(id) && !pendingReadPostIds.has(id));
             
             if (postIds.length === 0) return;
             
-            // Mark posts as read locally
-            postIds.forEach(id => readPosts.add(id));
+            // Mark posts as read locally and add to pending batch
+            postIds.forEach(id => {
+              readPosts.add(id);
+              pendingReadPostIds.add(id);
+            });
+            
+            // Clear existing timer and set a new one
+            if (markAsReadTimer) {
+              clearTimeout(markAsReadTimer);
+            }
+            
+            markAsReadTimer = setTimeout(() => {
+              sendBatchedReadRequests();
+            }, MARK_AS_READ_BATCH_DELAY);
+          }
+          
+          function sendBatchedReadRequests() {
+            if (pendingReadPostIds.size === 0) return;
+            
+            const postIdsToSend = Array.from(pendingReadPostIds);
+            const currentBatch = new Set(pendingReadPostIds);
+            
+            // Clear the pending set and timer
+            pendingReadPostIds.clear();
+            markAsReadTimer = null;
             
             // Send to server
             fetch('/api/posts/mark-read', {
@@ -407,18 +434,18 @@ export function generateHTML(
               headers: {
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify({ postIds: postIds })
+              body: JSON.stringify({ postIds: postIdsToSend })
             })
             .then(response => response.json())
             .then(data => {
               if (data.success) {
-                console.log('Marked ' + postIds.length + ' posts as read');
+                console.log('Marked ' + postIdsToSend.length + ' posts as read (batched)');
               }
             })
             .catch(error => {
               console.error('Error marking posts as read:', error);
               // Remove from local set if server request failed
-              postIds.forEach(id => readPosts.delete(id));
+              currentBatch.forEach(id => readPosts.delete(id));
             });
           }
           
@@ -723,6 +750,31 @@ export function generateHTML(
             setTimeout(function() {
               initializeReadTracking();
             }, 100);
+          });
+          
+          // Handle any pending read requests when page is about to unload
+          window.addEventListener('beforeunload', function() {
+            if (pendingReadPostIds.size > 0) {
+              // Clear the timer and send immediately
+              if (markAsReadTimer) {
+                clearTimeout(markAsReadTimer);
+                markAsReadTimer = null;
+              }
+              
+              // Use sendBeacon for reliable delivery during page unload
+              const postIdsToSend = Array.from(pendingReadPostIds);
+              pendingReadPostIds.clear();
+              
+              if (navigator.sendBeacon) {
+                navigator.sendBeacon('/api/posts/mark-read', JSON.stringify({ postIds: postIdsToSend }));
+              } else {
+                // Fallback to synchronous request
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/api/posts/mark-read', false);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.send(JSON.stringify({ postIds: postIdsToSend }));
+              }
+            }
           });
         </script>
       </head>
