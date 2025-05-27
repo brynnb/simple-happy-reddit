@@ -324,6 +324,46 @@ app.post("/api/analyze", async (req, res) => {
   }
 });
 
+app.post("/api/moderate-all", async (req, res) => {
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(400).json({ error: "OpenAI API key not configured" });
+    }
+
+    const unanalyzedCount = db.db
+      .prepare(
+        "SELECT COUNT(*) as count FROM posts WHERE analyzed_at IS NULL AND hidden = 0 AND read_at IS NULL"
+      )
+      .get().count;
+
+    if (unanalyzedCount === 0) {
+      return res.json({
+        success: true,
+        message: "No unanalyzed posts to moderate",
+        queued: 0,
+      });
+    }
+
+    setImmediate(async () => {
+      try {
+        await aiAnalysisService.processAnalysisQueue(unanalyzedCount);
+        await db.uploadDatabaseToCloud();
+      } catch (error) {
+        console.error("Background moderation error:", error);
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `Queued ${unanalyzedCount} posts for AI analysis`,
+      queued: unanalyzedCount,
+    });
+  } catch (error) {
+    console.error("Error queuing posts for moderation:", error);
+    res.status(500).json({ error: "Failed to queue posts for moderation" });
+  }
+});
+
 app.get("/api/analysis/stats", (req, res) => {
   try {
     const totalPosts = db.getPostCount(true);
@@ -357,6 +397,22 @@ app.post("/api/moderation/clear", async (req, res) => {
   } catch (error) {
     console.error("Error clearing moderation data:", error);
     res.status(500).json({ error: "Failed to clear moderation data" });
+  }
+});
+
+app.post("/api/tags/reinitialize", async (req, res) => {
+  try {
+    const tagCount = db.clearAndReseedTags();
+    await db.uploadDatabaseToCloud();
+
+    res.json({
+      success: true,
+      message: `Tags reinitialized successfully with ${tagCount} tags`,
+      tagCount: tagCount,
+    });
+  } catch (error) {
+    console.error("Error reinitializing tags:", error);
+    res.status(500).json({ error: "Failed to reinitialize tags" });
   }
 });
 

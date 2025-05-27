@@ -863,7 +863,7 @@ class DatabaseManager {
       // Reset the auto-increment counter
       this.db.prepare("DELETE FROM sqlite_sequence WHERE name = 'tags'").run();
 
-      // Now reseed with the predefined tags
+      // Now reseed with the same tags as initializeTags()
       const tags = [
         "elon",
         "trump",
@@ -882,40 +882,19 @@ class DatabaseManager {
         "artificial intelligence",
         "cryptocurrency",
         "economy",
-        "stock market",
-        "housing market",
-        "federal reserve",
-        "supreme court",
-        "congress",
-        "abortion",
-        "gun control",
-        "immigration",
-        "healthcare",
-        "social security",
-        "student loans",
-        "debt ceiling",
-        "government shutdown",
+        "hate speech",
+        "government policy",
         "criminal justice",
         "police",
         "crime",
         "violence",
-        "protest",
         "racism",
         "discrimination",
         "lgbtq",
         "gender issues",
         "natural disaster",
-        "celebrity",
-        "scandal",
         "controversy",
-        "cancel culture",
-        "social media",
         "misinformation",
-        "conspiracy",
-        "extremism",
-        "terrorism",
-        "cybersecurity",
-        "privacy",
         "human abuse",
         "animal abuse",
       ];
@@ -936,15 +915,14 @@ class DatabaseManager {
       // Clear all post_tags relationships
       this.db.prepare("DELETE FROM post_tags").run();
 
-      // Reset all posts to unhidden and clear moderation fields
+      // Reset all posts to unhidden and clear moderation fields (preserve read_at)
       this.db
         .prepare(
           `
         UPDATE posts SET 
           hidden = 0,
           ai_explanation = NULL,
-          analyzed_at = NULL,
-          read_at = NULL
+          analyzed_at = NULL
       `
         )
         .run();

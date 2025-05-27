@@ -523,6 +523,59 @@ export function generateHTML(
             }
           }
           
+          function moderateAllContent() {
+            const button = document.getElementById('moderateAllBtn');
+            const originalText = button.textContent;
+            button.textContent = 'Queuing...';
+            button.disabled = true;
+            button.style.backgroundColor = '#6c757d';
+            
+            fetch('/api/moderate-all', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              }
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                const notification = document.createElement('div');
+                notification.style.cssText = 
+                  'position: fixed;' +
+                  'top: 20px;' +
+                  'right: 20px;' +
+                  'background: #28a745;' +
+                  'color: white;' +
+                  'padding: 15px 20px;' +
+                  'border-radius: 5px;' +
+                  'z-index: 1000;' +
+                  'font-size: 14px;' +
+                  'box-shadow: 0 2px 10px rgba(0,0,0,0.2);' +
+                  'max-width: 300px;' +
+                  'line-height: 1.4;';
+                notification.innerHTML = 
+                  '<strong>AI Analysis Queued!</strong><br>' +
+                  data.message;
+                document.body.appendChild(notification);
+                
+                setTimeout(function() {
+                  notification.remove();
+                }, 5000);
+              } else {
+                alert('Failed to queue moderation: ' + (data.error || 'Unknown error'));
+              }
+            })
+            .catch(error => {
+              console.error('Error:', error);
+              alert('Failed to queue moderation');
+            })
+            .finally(() => {
+              button.textContent = originalText;
+              button.disabled = false;
+              button.style.backgroundColor = '#007bff';
+            });
+          }
+
           function clearModerationData() {
             const confirmed = confirm(
               'Are you sure you want to delete ALL moderation data?\\n\\n' +
@@ -530,7 +583,8 @@ export function generateHTML(
               '• Clear all AI analysis results\\n' +
               '• Remove all post categories and tags\\n' +
               '• Reset all posts to visible\\n' +
-              '• Re-apply subreddit and keyword filters\\n\\n' +
+              '• Re-apply subreddit and keyword filters\\n' +
+              '• Preserve read status of posts\\n\\n' +
               'This action cannot be undone!'
             );
             
@@ -572,7 +626,7 @@ export function generateHTML(
                   'Total posts: ' + data.stats.totalPosts + '<br>' +
                   'Visible: ' + data.stats.visiblePosts + '<br>' +
                   'Hidden: ' + data.stats.hiddenPosts + '<br>' +
-                  'Read status reset';
+                  'Read status preserved';
                 document.body.appendChild(notification);
                 
                 setTimeout(function() {
@@ -591,6 +645,73 @@ export function generateHTML(
               button.textContent = originalText;
               button.disabled = false;
               button.style.backgroundColor = '#dc3545';
+            });
+          }
+
+          function reinitializeTags() {
+            const confirmed = confirm(
+              'Are you sure you want to reinitialize all tags?\\n\\n' +
+              'This will:\\n' +
+              '• Delete all existing tags\\n' +
+              '• Remove all post-tag relationships\\n' +
+              '• Add the predefined tags from initializeTags()\\n\\n' +
+              'This action cannot be undone!'
+            );
+            
+            if (!confirmed) {
+              return;
+            }
+            
+            const button = document.getElementById('reinitializeTagsBtn');
+            const originalText = button.textContent;
+            button.textContent = 'Reinitializing...';
+            button.disabled = true;
+            button.style.backgroundColor = '#6c757d';
+            
+            fetch('/api/tags/reinitialize', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              }
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                const notification = document.createElement('div');
+                notification.style.cssText = 
+                  'position: fixed;' +
+                  'top: 20px;' +
+                  'right: 20px;' +
+                  'background: #28a745;' +
+                  'color: white;' +
+                  'padding: 15px 20px;' +
+                  'border-radius: 5px;' +
+                  'z-index: 1000;' +
+                  'font-size: 14px;' +
+                  'box-shadow: 0 2px 10px rgba(0,0,0,0.2);' +
+                  'max-width: 300px;' +
+                  'line-height: 1.4;';
+                notification.innerHTML = 
+                  '<strong>Tags reinitialized!</strong><br>' +
+                  'Added ' + data.tagCount + ' predefined tags';
+                document.body.appendChild(notification);
+                
+                setTimeout(function() {
+                  notification.remove();
+                  window.location.reload();
+                }, 3000);
+              } else {
+                alert('Failed to reinitialize tags: ' + (data.error || 'Unknown error'));
+              }
+            })
+            .catch(error => {
+              console.error('Error:', error);
+              alert('Failed to reinitialize tags');
+            })
+            .finally(() => {
+              button.textContent = originalText;
+              button.disabled = false;
+              button.style.backgroundColor = '#ffc107';
             });
           }
           
@@ -612,6 +733,42 @@ export function generateHTML(
             <input type="checkbox" id="debugToggle" onchange="toggleDebugInfo()" style="margin-right: 8px;">
             Show debug info
           </label>
+          <button 
+            id="moderateAllBtn" 
+            onclick="moderateAllContent()" 
+            style="
+              background: #007bff; 
+              color: white; 
+              border: none; 
+              padding: 8px 16px; 
+              border-radius: 4px; 
+              font-size: 12px; 
+              cursor: pointer;
+              transition: background-color 0.2s ease;
+            "
+            onmouseover="this.style.backgroundColor='#0056b3'"
+            onmouseout="this.style.backgroundColor='#007bff'"
+          >
+            Moderate All Content
+          </button>
+          <button 
+            id="reinitializeTagsBtn" 
+            onclick="reinitializeTags()" 
+            style="
+              background: #ffc107; 
+              color: #212529; 
+              border: none; 
+              padding: 8px 16px; 
+              border-radius: 4px; 
+              font-size: 12px; 
+              cursor: pointer;
+              transition: background-color 0.2s ease;
+            "
+            onmouseover="this.style.backgroundColor='#e0a800'"
+            onmouseout="this.style.backgroundColor='#ffc107'"
+          >
+            Reinitialize All Tags
+          </button>
           <button 
             id="clearModerationBtn" 
             onclick="clearModerationData()" 
