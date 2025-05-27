@@ -104,13 +104,13 @@ app.get("/", async (req, res) => {
   }
 });
 
-app.get("/hidden", async (req, res) => {
+app.get("/filtered", async (req, res) => {
   try {
     const hiddenPosts = db.getPosts(100, 0, true).filter((post) => post.hidden);
     const posts = transformPostsForDisplay(hiddenPosts, db);
     const hiddenCount = db.getHiddenPostCount();
 
-    const html = generateHTML(posts, hiddenCount, 0, "Hidden Posts");
+    const html = generateHTML(posts, hiddenCount, 0, "Filtered Posts");
     res.send(html);
   } catch (error) {
     console.error("Error getting hidden posts:", error);

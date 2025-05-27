@@ -606,7 +606,7 @@ export function generateHTML(
         </script>
       </head>
       <body>
-        <h1>${pageTitle === "Hidden Posts" ? "😢" : "🎉"} ${pageTitle}</h1>
+        <h1>${pageTitle === "Filtered Posts" ? "😢" : "🎉"} ${pageTitle}</h1>
         <div style="text-align: center; margin-bottom: 20px; display: flex; justify-content: center; align-items: center; gap: 20px; flex-wrap: wrap;">
           <label style="font-size: 14px; color: #666; cursor: pointer;">
             <input type="checkbox" id="debugToggle" onchange="toggleDebugInfo()" style="margin-right: 8px;">
@@ -641,7 +641,7 @@ export function generateHTML(
               })</div>
               ${
                 hiddenCount > 0 && pageTitle === "Simple Happy Reddit"
-                  ? `<div style="text-align: center; margin-bottom: 20px;"><a href="/hidden" style="color: #0079d3; text-decoration: none;">View ${hiddenCount} hidden posts</a></div>`
+                  ? `<div style="text-align: center; margin-bottom: 20px;"><a href="/filtered" style="color: #0079d3; text-decoration: none;">View ${hiddenCount} filtered posts</a></div>`
                   : ""
               }
               ${
@@ -650,7 +650,7 @@ export function generateHTML(
                   : ""
               }
               ${
-                pageTitle === "Hidden Posts" || pageTitle === "Read Posts"
+                pageTitle === "Filtered Posts" || pageTitle === "Read Posts"
                   ? `<div style="text-align: center; margin-bottom: 20px;"><a href="/" style="color: #0079d3; text-decoration: none;">← Back to unread posts</a></div>`
                   : ""
               }

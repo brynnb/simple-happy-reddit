@@ -1,7 +1,23 @@
 import { formatScore, formatComments } from "../utils/formatters.js";
 
 export function transformPostsForDisplay(storedPosts, db = null) {
-  return storedPosts.map((post) => {
+  const filteredPosts = storedPosts.filter((post) => {
+    if (db && post.analyzed_at) {
+      const categories = db.getPostCategories(post.id);
+      const blockedCategories = ["Politics", "Violence", "Mean Stuff"];
+
+      const hasBlockedCategory = categories.some((category) =>
+        blockedCategories.includes(category)
+      );
+
+      if (hasBlockedCategory) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  return filteredPosts.map((post) => {
     const basePost = {
       id: post.id,
       title: post.title,
