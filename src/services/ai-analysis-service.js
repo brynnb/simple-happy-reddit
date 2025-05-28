@@ -161,7 +161,7 @@ Rules:
       try {
         const analysis = await this.analyzePost(post);
 
-        this.db.saveAnalysisResult(
+        await this.db.saveAnalysisResult(
           post.id,
           false,
           analysis.categories || [],

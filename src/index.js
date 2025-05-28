@@ -178,10 +178,10 @@ app.get("/analyzed", async (req, res) => {
   }
 });
 
-app.post("/api/posts/:id/toggle", (req, res) => {
+app.post("/api/posts/:id/toggle", async (req, res) => {
   try {
     const { id } = req.params;
-    db.togglePostVisibility(id);
+    await db.togglePostVisibility(id);
     res.json({ success: true, message: `Toggled visibility for post ${id}` });
   } catch (error) {
     console.error("Error toggling post visibility:", error);
@@ -196,8 +196,7 @@ app.post("/api/posts/mark-read", async (req, res) => {
       return res.status(400).json({ error: "postIds array is required" });
     }
 
-    db.markPostsAsRead(postIds);
-    await db.uploadDatabaseToCloud();
+    await db.markPostsAsRead(postIds);
 
     res.json({
       success: true,

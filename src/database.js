@@ -357,11 +357,13 @@ class DatabaseManager {
     return stmt.get().count;
   }
 
-  togglePostVisibility(postId) {
+  async togglePostVisibility(postId) {
     const stmt = this.db.prepare(`
       UPDATE posts SET hidden = NOT hidden WHERE id = ?
     `);
-    return stmt.run(postId);
+    const result = stmt.run(postId);
+    await this.uploadDatabaseToCloud();
+    return result;
   }
 
   hidePostsBySubreddit(subreddit) {
@@ -1106,7 +1108,13 @@ class DatabaseManager {
     return stmt.all(limit);
   }
 
-  saveAnalysisResult(postId, matchesBlocked, categories, tags, explanation) {
+  async saveAnalysisResult(
+    postId,
+    matchesBlocked,
+    categories,
+    tags,
+    explanation
+  ) {
     const transaction = this.db.transaction(() => {
       const updatePost = this.db.prepare(`
         UPDATE posts 
@@ -1156,6 +1164,7 @@ class DatabaseManager {
     });
 
     transaction();
+    await this.uploadDatabaseToCloud();
   }
 
   getPostCategories(postId) {
@@ -1176,21 +1185,25 @@ class DatabaseManager {
     return stmt.all(postId).map((row) => row.name);
   }
 
-  markPostAsRead(postId) {
+  async markPostAsRead(postId) {
     const stmt = this.db.prepare(`
       UPDATE posts SET read_at = strftime('%s', 'now') WHERE id = ?
     `);
-    return stmt.run(postId);
+    const result = stmt.run(postId);
+    await this.uploadDatabaseToCloud();
+    return result;
   }
 
-  markPostsAsRead(postIds) {
+  async markPostsAsRead(postIds) {
     if (!postIds || postIds.length === 0) return;
 
     const placeholders = postIds.map(() => "?").join(",");
     const stmt = this.db.prepare(`
       UPDATE posts SET read_at = strftime('%s', 'now') WHERE id IN (${placeholders})
     `);
-    return stmt.run(...postIds);
+    const result = stmt.run(...postIds);
+    await this.uploadDatabaseToCloud();
+    return result;
   }
 
   getReadPostCount() {
