@@ -753,7 +753,8 @@ export function generateHTML(
               'This will:\\n' +
               '• Delete all existing tags\\n' +
               '• Remove all post-tag relationships\\n' +
-              '• Add the predefined tags from initializeTags()\\n\\n' +
+              '• Add the predefined tags from initializeTags()\\n' +
+              '• Preserve read status, categories, and AI analysis\\n\\n' +
               'This action cannot be undone!'
             );
             

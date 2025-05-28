@@ -13,7 +13,15 @@ const app = express();
 const port = process.env.PORT || 8080;
 const db = new DatabaseManager();
 const blockingService = new BlockingService(db);
-const aiAnalysisService = new AIAnalysisService(db);
+
+// Only initialize AI analysis service if OpenAI API key is available
+let aiAnalysisService = null;
+if (process.env.OPENAI_API_KEY) {
+  aiAnalysisService = new AIAnalysisService(db);
+  console.log("AI Analysis Service initialized");
+} else {
+  console.log("OpenAI API key not found - AI analysis disabled");
+}
 
 app.use(express.static("public"));
 app.use(express.json());
@@ -80,7 +88,7 @@ app.get("/", async (req, res) => {
     );
     res.send(html);
 
-    if (process.env.OPENAI_API_KEY) {
+    if (aiAnalysisService) {
       setImmediate(async () => {
         try {
           await aiAnalysisService.processAnalysisQueue(100);

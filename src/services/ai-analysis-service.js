@@ -113,7 +113,7 @@ Note: If an image is included with this post, analyze both the text content and 
 
 SPECIFIC CATEGORIZATION RULES:
 - "Mean Stuff": Mean stuff includes content that is mocking, ridiculing, harassing, disparaging, or teasing - unless it's entirely humorous and done playfully and doesn't involve any public or political figures
-- "Unpleasant": Unpleasant includes mentions of real humans or real animals having suffered or died. Unpleasant also includes mentions of death, divorce, war, health issues, health conditions, malformations, amputation, loss, sorrow, and grief.
+- "Unpleasant": Unpleasant includes mentions of real humans or real animals having suffered or died. Unpleasant also includes mentions of death, divorce, war, health issues, health conditions, malformations, amputation, loss, sorrow, and grief. Does not apply to fictional settings and characters. Do not use this tag for any other reason.
 - "Violence": Violence includes criminal justice, prison, policing content, people fighting, people damaging property
 - "Politics": Politics includes content about criminal justice/prison/policing. Also includes any mention or reference to any political figure or political event. 
 
